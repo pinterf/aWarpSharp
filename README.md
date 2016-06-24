@@ -14,7 +14,7 @@ aWarpSharp package 2016.06.24 - a WarpSharpening filter for Avisynth+ and AviSyn
   - working x64 version
   - minor cleanup
 
-  awarpsharp2-2015.12.30 build:
+awarpsharp2-2015.12.30 build:
 
   Modified from the Firesledge's 2015.01.29 modification of 2012.03.28 version
   and modified again.
