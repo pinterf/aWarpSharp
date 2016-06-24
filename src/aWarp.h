@@ -37,29 +37,29 @@
 */
 void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, int plane, int plane_edg, int depth, const VideoInfo &dst_vi)
 {
-	const int src_pitch = src->GetPitch(plane);         // 00 -312d+ebp
-	const int edg_pitch = edg->GetPitch(plane_edg);     // 04 
-	const int dst_pitch = dst->GetPitch(plane);         // 08
-	const int row_size = dst->GetRowSize() >> dst_vi.GetPlaneWidthSubsampling (plane); // 0C
-	const int i = -(row_size + 3 & ~3);                 // 10
-	const int c = row_size + i - 1;                     // 14
-	const int height = dst->GetHeight() >> dst_vi.GetPlaneHeightSubsampling (plane); // 18
-	const unsigned char *psrc = src->GetReadPtr(plane) - i*SMAG; // 18 + sizeof(ptr) = 1C (x86)
-	const unsigned char *pedg = edg->GetReadPtr(plane_edg) - i;  // 1C + sizeof(ptr) = 20 (x86)
-	unsigned char *pdst = dst->GetWritePtr(plane) - i;           // not aligned! P.F.: i is mod4 only
+	const int src_pitch = src->GetPitch(plane);
+	const int edg_pitch = edg->GetPitch(plane_edg);
+	const int dst_pitch = dst->GetPitch(plane);
+	const int row_size = dst->GetRowSize() >> dst_vi.GetPlaneWidthSubsampling (plane);
+	const int i = -(row_size + 3 & ~3);
+	const int c = row_size + i - 1;
+	const int height = dst->GetHeight() >> dst_vi.GetPlaneHeightSubsampling (plane);
+	const unsigned char *psrc = src->GetReadPtr(plane) - i*SMAG;
+	const unsigned char *pedg = edg->GetReadPtr(plane_edg) - i;
+	unsigned char *pdst = dst->GetWritePtr(plane) - i;
 
 	depth <<= 8;
 
-	const short x_limit_min[8] = {i*SMAG, (i-1)*SMAG, (i-2)*SMAG, (i-3)*SMAG, (i-4)*SMAG, (i-5)*SMAG, (i-6)*SMAG, (i-7)*SMAG}; // -44d+ebp = ebp-2Ch
-	const short x_limit_max[8] = {c*SMAG, (c-1)*SMAG, (c-2)*SMAG, (c-3)*SMAG, (c-4)*SMAG, (c-5)*SMAG, (c-6)*SMAG, (c-7)*SMAG}; // -24d+ebp = ebp-18h
+	const short x_limit_min[8] = {i*SMAG, (i-1)*SMAG, (i-2)*SMAG, (i-3)*SMAG, (i-4)*SMAG, (i-5)*SMAG, (i-6)*SMAG, (i-7)*SMAG};
+	const short x_limit_max[8] = {c*SMAG, (c-1)*SMAG, (c-2)*SMAG, (c-3)*SMAG, (c-4)*SMAG, (c-5)*SMAG, (c-6)*SMAG, (c-7)*SMAG};
 
   if (g_cpuid & CPUF_SSE2)
   {
     // SSE2 and SSSE3 versions
     for (int y = 0; y < height; y++)
     {
-      int y_limit_min = -y * 0x80; // [esp + 28h] /
-      int y_limit_max = (height - y) * 0x80 - 0x81; // [esp + 28h] /
+      int y_limit_min = -y * 0x80;
+      int y_limit_max = (height - y) * 0x80 - 0x81;
       int edg_pitchp = -(y ? edg_pitch : 0);
       int edg_pitchn = y != height - 1 ? edg_pitch : 0;
 
@@ -67,16 +67,16 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
         mov	QSI, psrc
         mov	QCX, pedg
         mov	QAX, pdst
-        movsx_int	QDX, src_pitch  // auto extend to 64 bit
-        movsx_int	QBX, edg_pitchp // auto extend to 64 bit
-        movsx_int	QDI, i          // signed! P.F.
+        movsx_int	QDX, src_pitch
+        movsx_int	QBX, edg_pitchp
+        movsx_int	QDI, i          // signed!
         sub	QAX, 8
         add	QDX, QSI
         add	QBX, QCX
-        movd	xmm1, y_limit_min   // - 272 + ebp
-        movd	xmm2, y_limit_max   // -264+ebp
-        movdqu	xmm3, x_limit_min // movdqu    xmm3, XMMWORD PTR [-44+ebp]                   ;70.9
-        movdqu	xmm4, x_limit_max // movdqu    xmm4, XMMWORD PTR [-24+ebp]                   ;71.9
+        movd	xmm1, y_limit_min
+        movd	xmm2, y_limit_max
+        movdqu	xmm3, x_limit_min
+        movdqu	xmm4, x_limit_max
         movd	xmm6, depth
         movd	xmm0, src_pitch
         pcmpeqw	xmm7, xmm7
@@ -94,16 +94,16 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
         push	QBP            // save ebp. 4 bytes on stack also for x64!
 #if defined(X86_32)
         // make room for local variables
-        push	edg_pitchn     // yet another 4 bytes on stack
+        push	edg_pitchn
         
-        lea	ebp, [esp - 5Ch] // ??? ... Where does it point??
-        and ebp, ~0Fh        // ebp = (esp - 5Ch) and not 0Fh
-        xchg	esp, ebp       // esp = ebp
+        lea	ebp, [esp - 5Ch]
+        and ebp, ~0Fh
+        xchg	esp, ebp
         
-        push	eax            // save eax. later: mov eax,[esp-4]
+        push	eax
         push	ebp
         mov	ebp, [ebp]
-        add	ebp, ecx         // ..???  // QCX here: pedg
+        add	ebp, ecx
 
         movdqa	xmm7, [QDI + QCX]
         movdqa[esp + 8h], xmm0
@@ -236,7 +236,7 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
 #if defined(X86_32)
           mov	eax, [esp + 4]
 #else
-          mov	rax, r8    // save back
+          mov	rax, r8    // restore rax
 #endif
 
           pcmpeqw	xmm6, xmm6
@@ -448,11 +448,11 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
           movq	qword ptr[QDI + QAX], xmm3
           jnz	l3
           jmp	lx
-          ls :
-        movd[QDI + QAX], xmm3
-          lx :
+        ls :
+          movd[QDI + QAX], xmm3
+        lx :
 #if defined(X86_32)
-        pop	QSP
+          pop	QSP
           pop	QCX
 #endif
           pop	QBP
@@ -463,6 +463,7 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
     } // for y
   }
 #ifdef X86_32
+  // PF personal opinion: it's 2016 now, MMX parts should die.
   else
   {
     // MMXExt version
