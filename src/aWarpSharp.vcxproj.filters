@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav</Extensions>
     </Filter>
+    <Filter Include="Docs">
+      <UniqueIdentifier>{5ada2c62-1a5b-458e-a746-2f97b0461794}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="aWarpSharp.cpp">
@@ -50,5 +53,10 @@
     <ClInclude Include="include\avs\win.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="aWarpSharp.txt">
+      <Filter>Docs</Filter>
+    </Text>
   </ItemGroup>
 </Project>
