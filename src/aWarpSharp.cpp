@@ -1,4 +1,4 @@
-// aWarpSharp package 2016.06.30 for Avisynth+ and Avisynth 2.6
+// aWarpSharp package 2016.06.23 for Avisynth+ and Avisynth 2.6
 // based on Firesledge's 2015.12.30 for Avisynth 2.5
 // aWarpSharp package 2012.03.28 for Avisynth 2.5
 // Copyright (C) 2003 MarcFD, 2012 Skakov Pavel

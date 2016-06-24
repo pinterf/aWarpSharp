@@ -1,4 +1,4 @@
-aWarpSharp package 2016.06.30 - a WarpSharpening filter for Avisynth+ and AviSynth 2.6
+aWarpSharp package 2016.06.23 - a WarpSharpening filter for Avisynth+ and AviSynth 2.6
 
   Based on awarpsharp2-2015.12.30 build (cretindesalpes mod)
     http://ldesoras.free.fr/src/avs/awarpsharp2-2015.12.30.zip
@@ -10,8 +10,9 @@ aWarpSharp package 2016.06.30 - a WarpSharpening filter for Avisynth+ and AviSyn
     http://avisynth.nl/index.php/AWarpSharp2
 
   Addition by pinterf on 20160623: 
-  - AviSynth 2.6 interface
-  - x64 version
+  - AviSynth 2.6 interface, Avisynth+ header
+  - working x64 version
+  - minor cleanup
 
   awarpsharp2-2015.12.30 build:
 
@@ -91,4 +92,4 @@ Original aWarpSharp compatibility:
   but errors in case of out of bounds values will be displayed in new terms.
 
 
-Copyright (C) 2003 MarcFD, 2012 Skakov Pavel, 2015 _08, Firesledge
+Copyright (C) 2003 MarcFD, 2012 Skakov Pavel, 2015 _08, Firesledge, 2016 pinterf
