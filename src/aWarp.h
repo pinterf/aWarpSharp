@@ -50,8 +50,10 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
 
 	depth <<= 8;
 
-	const short x_limit_min[8] = {i*SMAG, (i-1)*SMAG, (i-2)*SMAG, (i-3)*SMAG, (i-4)*SMAG, (i-5)*SMAG, (i-6)*SMAG, (i-7)*SMAG};
-	const short x_limit_max[8] = {c*SMAG, (c-1)*SMAG, (c-2)*SMAG, (c-3)*SMAG, (c-4)*SMAG, (c-5)*SMAG, (c-6)*SMAG, (c-7)*SMAG};
+	const short x_limit_min[8] = { (short)(i*SMAG)    , (short)((i-1)*SMAG), (short)((i-2)*SMAG), (short)((i-3)*SMAG), 
+                                 (short)((i-4)*SMAG), (short)((i-5)*SMAG), (short)((i-6)*SMAG), (short)((i-7)*SMAG)};
+	const short x_limit_max[8] = { (short)(c*SMAG)    , (short)((c-1)*SMAG), (short)((c-2)*SMAG), (short)((c-3)*SMAG), 
+                                 (short)((c-4)*SMAG), (short)((c-5)*SMAG), (short)((c-6)*SMAG), (short)((c-7)*SMAG)};
 
   if (g_cpuid & CPUF_SSE2)
   {
@@ -91,7 +93,7 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
         packssdw	xmm6, xmm6
         pcmpeqw	xmm5, xmm5
         psllw	xmm5, 0Fh
-        push	QBP            // save ebp. 4 bytes on stack also for x64!
+        push	QBP            // save ebp, also for x64!
 #if defined(X86_32)
         // make room for local variables
         push	edg_pitchn
