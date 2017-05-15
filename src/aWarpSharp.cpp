@@ -20,6 +20,7 @@
 #include "avs\config.h"
 #include <cstring>
 #include <cassert>
+#include <algorithm>
 
 __declspec(align(16)) static const unsigned char dq0toF[0x10] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
 
@@ -1266,6 +1267,32 @@ void SetPlane(PVideoFrame &dst, int plane, int value, const VideoInfo &dst_vi)
       memset(pdst, value, dst_row_size);
 }
 
+void SetPlane_uint16(PVideoFrame &dst, int plane, int value, const VideoInfo &dst_vi)
+{
+  const int dst_pitch = dst->GetPitch(plane) / sizeof(uint16_t);
+  uint16_t *pdst = reinterpret_cast<uint16_t *>(dst->GetWritePtr(plane));
+  const int dst_row_size = (dst->GetRowSize() >> dst_vi.GetPlaneWidthSubsampling(plane)) / sizeof(uint16_t);
+  int height = dst->GetHeight() >> dst_vi.GetPlaneHeightSubsampling(plane);
+  if (dst_pitch == dst_row_size)
+    std::fill_n((uint16_t *)pdst, dst_pitch*height, (uint16_t)value);
+  else
+    for (; height--; pdst += dst_pitch)
+      std::fill_n((uint16_t *)pdst, dst_row_size, (uint16_t)value);
+}
+
+void SetPlane_float(PVideoFrame &dst, int plane, float value, const VideoInfo &dst_vi)
+{
+  const int dst_pitch = dst->GetPitch(plane) / sizeof(float);
+  float *pdst = reinterpret_cast<float *>(dst->GetWritePtr(plane));
+  const int dst_row_size = (dst->GetRowSize() >> dst_vi.GetPlaneWidthSubsampling(plane)) / sizeof(float);
+  int height = dst->GetHeight() >> dst_vi.GetPlaneHeightSubsampling(plane);
+  if (dst_pitch == dst_row_size)
+    std::fill_n((float *)pdst, dst_pitch*height, value);
+  else
+    for (; height--; pdst += dst_pitch)
+      std::fill_n((float *)pdst, dst_row_size, value);
+}
+
 void CopyPlane(PVideoFrame &src, PVideoFrame &dst, int plane, const VideoInfo &dst_vi)
 {
   const int src_pitch = src->GetPitch(plane);
@@ -1315,14 +1342,19 @@ class aWarpSharp : public GenericVideoFilter
   int chroma;
   int blur_type;
   bool cplace_mpeg2_flag = false;
+  
+  int pixelsize;
+  int bits_per_pixel;
 
 public:
   aWarpSharp(PClip _child, int _thresh, int _blur_level, int _blur_type, int _depth, int _chroma, int _depthC, bool _cplace_mpeg2_flag, IScriptEnvironment *env) :
     GenericVideoFilter(_child), thresh(_thresh), blur_level(_blur_level), blur_type(_blur_type), depth(_depth), chroma(_chroma), depthC(_depthC), cplace_mpeg2_flag(_cplace_mpeg2_flag)
   {
+    pixelsize = vi.ComponentSize();
+    bits_per_pixel = vi.BitsPerComponent();
     if (depthC == 0)
-      depthC = vi.IsYV24() ? depth : depth / 2;
-    if (vi.IsY8())
+      depthC = vi.Is444() ? depth : depth / 2;
+    if (vi.IsY())
       chroma = 1;
     CheckParams(env, "aWarpSharp2", vi.IsYUV() && vi.IsPlanar(), thresh, blur_type, depth, depthC, chroma);
   }
@@ -1351,8 +1383,20 @@ PVideoFrame __stdcall aWarpSharp::GetFrame(int n, IScriptEnvironment *env)
   switch (chroma)
   {
   case 0:
-    SetPlane(dst, PLANAR_U, 0x80, vi);
-    SetPlane(dst, PLANAR_V, 0x80, vi);
+    switch (pixelsize) {
+    case 1:
+      SetPlane(dst, PLANAR_U, 0x80, vi);
+      SetPlane(dst, PLANAR_V, 0x80, vi);
+      break;
+    case 2: 
+      SetPlane_uint16(dst, PLANAR_U, 1 << (bits_per_pixel - 1), vi);
+      SetPlane_uint16(dst, PLANAR_V, 1 << (bits_per_pixel - 1), vi);
+      break;
+    case 4:
+      SetPlane_float(dst, PLANAR_U, 0.5f, vi);
+      SetPlane_float(dst, PLANAR_V, 0.5f, vi);
+      break;
+    }
     break;
   case 2:
     CopyPlane(src, dst, PLANAR_U, vi);
@@ -1371,7 +1415,7 @@ PVideoFrame __stdcall aWarpSharp::GetFrame(int n, IScriptEnvironment *env)
     break;
   case 4:
   case 6:
-    if (!vi.IsYV24())
+    if (!vi.Is444())
     {
       GuideChroma(tmp, tmp, vi, vi, cplace_mpeg2_flag);
       Warp0(src, tmp, dst, PLANAR_U, PLANAR_U, depthC, vi);
@@ -1394,11 +1438,16 @@ class aSobel : public GenericVideoFilter
 {
   int thresh;
   int chroma;
+
+  int pixelsize;
+  int bits_per_pixel;
 public:
   aSobel(PClip _child, int _thresh, int _chroma, IScriptEnvironment *env) :
     GenericVideoFilter(_child), thresh(_thresh), chroma(_chroma)
   {
-    if (vi.IsY8())
+    pixelsize = vi.ComponentSize();
+    bits_per_pixel = vi.BitsPerComponent();
+    if (vi.IsY())
       chroma = 1;
     CheckParams(env, "aSobel", vi.IsYUV() && vi.IsPlanar(), thresh, 0, 0, 0, chroma);
   }
@@ -1418,8 +1467,20 @@ PVideoFrame __stdcall aSobel::GetFrame(int n, IScriptEnvironment *env)
   switch (chroma)
   {
   case 0:
-    SetPlane(dst, PLANAR_U, 0x80, vi);
-    SetPlane(dst, PLANAR_V, 0x80, vi);
+    switch (pixelsize) {
+    case 1:
+      SetPlane(dst, PLANAR_U, 0x80, vi);
+      SetPlane(dst, PLANAR_V, 0x80, vi);
+      break;
+    case 2:
+      SetPlane_uint16(dst, PLANAR_U, 1 << (bits_per_pixel - 1), vi);
+      SetPlane_uint16(dst, PLANAR_V, 1 << (bits_per_pixel - 1), vi);
+      break;
+    case 4:
+      SetPlane_float(dst, PLANAR_U, 0.5f, vi);
+      SetPlane_float(dst, PLANAR_V, 0.5f, vi);
+      break;
+    }
     break;
   case 1:
     break;
@@ -1444,11 +1505,16 @@ class aBlur : public GenericVideoFilter
   int blur_level;
   int blur_type;
   int chroma;
+
+  int pixelsize;
+  int bits_per_pixel;
 public:
   aBlur(PClip _child, int _blur_level, int _blur_type, int _chroma, IScriptEnvironment *env) :
     GenericVideoFilter(_child), blur_level(_blur_level), blur_type(_blur_type), chroma(_chroma)
   {
-    if (vi.IsY8())
+    pixelsize = vi.ComponentSize();
+    bits_per_pixel = vi.BitsPerComponent();
+    if (vi.IsY())
       chroma = 1;
     CheckParams(env, "aBlur", vi.IsYUV() && vi.IsPlanar(), 0, blur_type, 0, 0, chroma);
   }
@@ -1468,8 +1534,20 @@ PVideoFrame __stdcall aBlur::GetFrame(int n, IScriptEnvironment *env)
   switch (chroma)
   {
   case 0:
-    SetPlane(src, PLANAR_U, 0x80, vi);
-    SetPlane(src, PLANAR_V, 0x80, vi);
+    switch (pixelsize) {
+    case 1:
+      SetPlane(src, PLANAR_U, 0x80, vi);
+      SetPlane(src, PLANAR_V, 0x80, vi);
+      break;
+    case 2:
+      SetPlane_uint16(src, PLANAR_U, 1 << (bits_per_pixel - 1), vi);
+      SetPlane_uint16(src, PLANAR_V, 1 << (bits_per_pixel - 1), vi);
+      break;
+    case 4:
+      SetPlane_float(src, PLANAR_U, 0.5f, vi);
+      SetPlane_float(src, PLANAR_V, 0.5f, vi);
+      break;
+    }
     break;
   case 1:
   case 2:
@@ -1495,14 +1573,20 @@ class aWarp : public GenericVideoFilter
   int depthC;
   int chroma;
   bool cplace_mpeg2_flag = false;
+
+  int pixelsize;
+  int bits_per_pixel;
 public:
   aWarp(PClip _child, PClip _edges, int _depth, int _chroma, int _depthC, bool _cplace_mpeg2_flag, IScriptEnvironment *env) :
     GenericVideoFilter(_child), edges(_edges), depth(_depth), chroma(_chroma), depthC(_depthC), cplace_mpeg2_flag(_cplace_mpeg2_flag)
   {
+    pixelsize = vi.ComponentSize();
+    bits_per_pixel = vi.BitsPerComponent();
+
     const VideoInfo &vi2 = edges->GetVideoInfo();
     if (depthC == NULL)
-      depthC = vi.IsYV24() ? depth : depth / 2;
-    if (vi.IsY8())
+      depthC = vi.Is444() ? depth : depth / 2;
+    if (vi.IsY())
       chroma = 1;
     CheckParams(env, "aWarp", vi.IsYUV() && vi.IsPlanar() && vi2.IsYUV() && vi2.IsPlanar(), 0, 0, depth, depthC, chroma);
     if (vi.width != vi2.width || vi.height != vi2.height)
@@ -1529,8 +1613,20 @@ PVideoFrame __stdcall aWarp::GetFrame(int n, IScriptEnvironment *env)
   switch (chroma)
   {
   case 0:
-    SetPlane(dst, PLANAR_U, 0x80, vi);
-    SetPlane(dst, PLANAR_V, 0x80, vi);
+    switch (pixelsize) {
+    case 1:
+      SetPlane(dst, PLANAR_U, 0x80, vi);
+      SetPlane(dst, PLANAR_V, 0x80, vi);
+      break;
+    case 2:
+      SetPlane_uint16(dst, PLANAR_U, 1 << (bits_per_pixel - 1), vi);
+      SetPlane_uint16(dst, PLANAR_V, 1 << (bits_per_pixel - 1), vi);
+      break;
+    case 4:
+      SetPlane_float(dst, PLANAR_U, 0.5f, vi);
+      SetPlane_float(dst, PLANAR_V, 0.5f, vi);
+      break;
+    }
     break;
   case 2:
     CopyPlane(src, dst, PLANAR_U, vi);
@@ -1543,7 +1639,7 @@ PVideoFrame __stdcall aWarp::GetFrame(int n, IScriptEnvironment *env)
     break;
   case 4:
   case 6:
-    if (!vi.IsYV24())
+    if (!vi.Is444())
     {
       if (edg->IsWritable())
         GuideChroma(edg, edg, vi, vi, cplace_mpeg2_flag);
@@ -1577,14 +1673,20 @@ class aWarp4 : public GenericVideoFilter
   int depthC;
   int chroma;
   bool cplace_mpeg2_flag = false;
+
+  int pixelsize;
+  int bits_per_pixel;
 public:
   aWarp4(PClip _child, PClip _edges, int _depth, int _chroma, int _depthC, bool _cplace_mpeg2_flag, IScriptEnvironment *env) :
     GenericVideoFilter(_child), edges(_edges), depth(_depth), chroma(_chroma), depthC(_depthC), cplace_mpeg2_flag(_cplace_mpeg2_flag)
   {
+    pixelsize = vi.ComponentSize();
+    bits_per_pixel = vi.BitsPerComponent();
+
     const VideoInfo &vi2 = edges->GetVideoInfo();
     if (depthC == NULL)
-      depthC = vi.IsYV24() ? depth : depth / 2;
-    if (vi.IsY8())
+      depthC = vi.Is444() ? depth : depth / 2;
+    if (vi.IsY())
       chroma = 1;
     CheckParams(env, "aWarp", vi.IsYUV() && vi.IsPlanar() && vi2.IsYUV() && vi2.IsPlanar(), 0, 0, depth, depthC, chroma);
     if (vi.width != vi2.width * 4 || vi.height != vi2.height * 4)
@@ -1612,8 +1714,20 @@ PVideoFrame __stdcall aWarp4::GetFrame(int n, IScriptEnvironment *env)
   switch (chroma)
   {
   case 0:
-    SetPlane(dst, PLANAR_U, 0x80, vi);
-    SetPlane(dst, PLANAR_V, 0x80, vi);
+    switch (pixelsize) {
+    case 1:
+      SetPlane(dst, PLANAR_U, 0x80, vi);
+      SetPlane(dst, PLANAR_V, 0x80, vi);
+      break;
+    case 2:
+      SetPlane_uint16(dst, PLANAR_U, 1 << (bits_per_pixel - 1), vi);
+      SetPlane_uint16(dst, PLANAR_V, 1 << (bits_per_pixel - 1), vi);
+      break;
+    case 4:
+      SetPlane_float(dst, PLANAR_U, 0.5f, vi);
+      SetPlane_float(dst, PLANAR_V, 0.5f, vi);
+      break;
+    }
     break;
   case 2:
     CopyPlane(src, dst, PLANAR_U, vi);
@@ -1626,7 +1740,7 @@ PVideoFrame __stdcall aWarp4::GetFrame(int n, IScriptEnvironment *env)
     break;
   case 4:
   case 6:
-    if (!vi.IsYV24())
+    if (!vi.Is444())
     {
       if (edg->IsWritable())
         GuideChroma(edg, edg, vi, vi, cplace_mpeg2_flag);
@@ -1662,7 +1776,7 @@ static bool is_cplace_mpeg2(const AVSValue &args, int pos)
 
 AVSValue __cdecl Create_aWarpSharp(AVSValue args, void *user_data, IScriptEnvironment *env)
 {
-  switch ((int)(size_t)user_data)
+  switch ((intptr_t)user_data)
   {
   case 0:
     return new aWarpSharp(args[0].AsClip(), args[1].AsInt(0x80), args[2].AsInt(args[3].AsInt(0) ? 3 : 2), args[3].AsInt(0), args[4].AsInt(16), args[5].AsInt(4), args[6].AsInt(NULL), is_cplace_mpeg2(args, 7), env);
