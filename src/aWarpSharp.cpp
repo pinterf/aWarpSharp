@@ -164,91 +164,6 @@ void Sobel(PVideoFrame &src, PVideoFrame &dst, int plane, int thresh, const Vide
       psrc += src_pitch;
       pdst += dst_pitch;
     }
-#ifdef X86_32
-  else
-    // MMXExt version
-    for (int y = 0; y < height; y++)
-    {
-      __asm {
-        mov	esi, psrc
-        mov	edi, pdst
-        mov	edx, src_pitch
-        xor	eax, eax
-        mov	ecx, y
-        test	ecx, ecx
-        cmovnz	eax, edx
-        inc	ecx
-        add	edx, eax
-        cmp	ecx, height
-        cmovz	edx, eax
-        sub	esi, eax
-        mov	ecx, i
-        sub	edi, 8
-        sub	edi, esi
-        movd	mm0, thresh
-        punpckldq	mm0, mm0
-        packssdw	mm0, mm0
-        packuswb	mm0, mm0
-        align	10h
-        lm :
-        movq	mm2, [esi - 1]
-          movq	mm3, [esi]
-          movq	mm4, [esi + 1]
-          movq	mm5, [esi + edx - 1]
-          movq	mm6, [esi + edx]
-          movq	mm7, [esi + edx + 1]
-
-          movq	mm1, mm2
-          pavgb	mm1, mm4
-          pavgb	mm3, mm1
-
-          movq	mm1, mm5
-          pavgb	mm1, mm7
-          pavgb	mm6, mm1
-
-          movq	mm1, mm3
-          psubusb	mm3, mm6
-          psubusb	mm6, mm1
-          por	mm6, mm3
-
-          movq	mm1, [esi + eax - 1]
-          movq	mm3, [esi + eax + 1]
-          pavgb	mm5, mm2
-          pavgb	mm7, mm4
-          pavgb	mm1, mm5
-          pavgb	mm3, mm7
-          movq	mm5, mm1
-          psubusb	mm1, mm3
-          psubusb	mm3, mm5
-          por	mm1, mm3
-
-          movq	mm2, mm6
-          paddusb	mm2, mm1
-          pmaxub	mm1, mm6
-          paddusb	mm2, mm1
-
-          movq	mm3, mm2
-          paddusb	mm2, mm2
-          paddusb	mm2, mm3
-          paddusb	mm2, mm2
-          pminub	mm2, mm0 // thresh
-
-          add	esi, 8
-          sub	ecx, 2
-          jb	lme
-          movntq[esi + edi], mm2
-          jnz	lm
-          jmp	lmx
-          lme :
-        movd[esi + edi], xmm2
-          lmx :
-      }
-      pdst[0] = pdst[1];
-      pdst[dst_row_size - 1] = pdst[dst_row_size - 2];
-      psrc += src_pitch;
-      pdst += dst_pitch;
-    }
-#endif
   __asm sfence;
 }
 
@@ -431,50 +346,6 @@ void BlurR6(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
       psrc2 += src_pitch;
       ptmp2 += tmp_pitch;
     }
-#ifdef X86_32
-  else
-    // MMXExt version
-    // 6 left and right pixels are wrong
-    for (int y = 0; y < height; y++)
-    {
-      __asm {
-        mov	QSI, psrc2
-        mov	QDI, ptmp2
-        mov	ecx, i
-        add	ecx, 7
-        shr	ecx, 3
-        sub	QDI, QSI
-        align	10h
-        lm0 :
-        movq	mm6, [QSI - 6]
-          pavgb	mm6, [QSI + 6]
-          movq	mm5, [QSI - 5]
-          pavgb	mm5, [QSI + 5]
-          movq	mm4, [QSI - 4]
-          pavgb	mm4, [QSI + 4]
-          movq	mm3, [QSI - 3]
-          pavgb	mm3, [QSI + 3]
-          movq	mm2, [QSI - 2]
-          pavgb	mm2, [QSI + 2]
-          movq	mm1, [QSI - 1]
-          pavgb	mm1, [QSI + 1]
-          movq	mm0, [QSI]
-          pavgb	mm6, mm5
-          pavgb	mm4, mm3
-          pavgb	mm2, mm1
-          pavgb	mm6, mm4
-          pavgb	mm2, mm0
-          pavgb	mm6, mm2
-          pavgb	mm6, mm2
-          movntq[QSI + QDI], mm6
-          add	QSI, 8
-          dec	ecx
-          jnz	lm0
-      }
-      psrc2 += src_pitch;
-      ptmp2 += tmp_pitch;
-    }
-#endif
   __asm sfence;
 
   // Vertical Blur
@@ -605,140 +476,6 @@ void BlurR6(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
       ptmp2 += tmp_pitch;
     }
   }
-#ifdef X86_32
-  else
-  {
-    // MMXExt version
-    int y;
-    psrc2 = psrc;
-    ptmp2 = ptmp;
-    for (y = 0; y < 6; y++)
-    {
-      __asm {
-        mov	eax, tmp_pitch
-        mov	esi, ptmp2
-        mov	edi, psrc2
-        mov	ecx, i
-        add	ecx, 7
-        shr	ecx, 3
-        lea	ebx, [eax + eax * 2]
-        lea	edx, [ebx + eax * 2]
-        add	edx, esi
-        sub	edi, esi
-        align	10h
-        lm1 :
-        movq	mm0, [esi]
-          movq	mm1, [esi + eax * 1]
-          movq	mm2, [esi + eax * 2]
-          movq	mm3, [esi + ebx * 1]
-          movq	mm4, [esi + eax * 4]
-          movq	mm5, [edx]
-          movq	mm6, [edx + eax * 1]
-          pavgb	mm6, mm5
-          pavgb	mm4, mm3
-          pavgb	mm2, mm1
-          pavgb	mm6, mm4
-          pavgb	mm2, mm0
-          pavgb	mm6, mm2
-          pavgb	mm6, mm2
-          movntq[esi + edi], mm6
-          add	esi, 8
-          add	edx, 8
-          dec	ecx
-          jnz	lm1
-      }
-      psrc2 += src_pitch;
-      ptmp2 += tmp_pitch;
-    }
-    ptmp2 = ptmp;
-    for (; y < height - 6; y++)
-    {
-      __asm {
-        mov	eax, tmp_pitch
-        mov	esi, ptmp2
-        mov	edi, psrc2
-        mov	ecx, i
-        add	ecx, 7
-        shr	ecx, 3
-        push	ebp
-        lea	ebp, [eax + eax * 2]
-        lea	edx, [ebp + eax * 2]
-        lea	ebx, [esi + edx * 2]
-        add	edx, esi
-        sub	edi, esi
-        align	10h
-        lm2 :
-        movq	mm6, [esi]
-          pavgb	mm6, [ebx + eax * 2]
-          movq	mm5, [esi + eax * 1]
-          pavgb	mm5, [ebx + eax * 1]
-          movq	mm4, [esi + eax * 2]
-          pavgb	mm4, [ebx]
-          movq	mm3, [esi + ebp * 1]
-          pavgb	mm3, [edx + eax * 4]
-          movq	mm2, [esi + eax * 4]
-          pavgb	mm2, [esi + eax * 8]
-          movq	mm1, [edx]
-          pavgb	mm1, [edx + eax * 2]
-          movq	mm0, [edx + eax * 1]
-          pavgb	mm6, mm5
-          pavgb	mm4, mm3
-          pavgb	mm2, mm1
-          pavgb	mm6, mm4
-          pavgb	mm2, mm0
-          pavgb	mm6, mm2
-          pavgb	mm6, mm2
-          movntq[esi + edi], mm6
-          add	esi, 8
-          add	edx, 8
-          add	ebx, 8
-          dec	ecx
-          jnz	lm2
-          pop	ebp
-      }
-      psrc2 += src_pitch;
-      ptmp2 += tmp_pitch;
-    }
-    for (; y < height; y++)
-    {
-      __asm {
-        mov	eax, tmp_pitch
-        mov	esi, ptmp2
-        mov	edi, psrc2
-        mov	ecx, i
-        add	ecx, 7
-        shr	ecx, 3
-        lea	ebx, [eax + eax * 2]
-        lea	edx, [ebx + eax * 2]
-        add	edx, esi
-        sub	edi, esi
-        align	10h
-        lm3 :
-        movq	mm6, [esi]
-          movq	mm5, [esi + eax * 1]
-          movq	mm4, [esi + eax * 2]
-          movq	mm3, [esi + ebx * 1]
-          movq	mm2, [esi + eax * 4]
-          movq	mm1, [edx]
-          movq	mm0, [edx + eax * 1]
-          pavgb	mm6, mm5
-          pavgb	mm4, mm3
-          pavgb	mm2, mm1
-          pavgb	mm6, mm4
-          pavgb	mm2, mm0
-          pavgb	mm6, mm2
-          pavgb	mm6, mm2
-          movntq[esi + edi], mm6
-          add	esi, 8
-          add	edx, 8
-          dec	ecx
-          jnz	lm3
-      }
-      psrc2 += src_pitch;
-      ptmp2 += tmp_pitch;
-    }
-  }
-#endif
   __asm sfence;
 }
 
@@ -859,41 +596,6 @@ void BlurR2(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
       psrc2 += src_pitch;
       ptmp2 += tmp_pitch;
     }
-#ifdef X86_32
-  else
-  {
-    // MMXExt version
-    // 2 left and right pixels are wrong
-    for (int y = 0; y < height; y++)
-    {
-      __asm {
-        mov	esi, psrc2
-        mov	edi, ptmp2
-        mov	ecx, i
-        add	ecx, 7
-        and ecx, ~7
-        add	esi, ecx
-        add	edi, ecx
-        neg	ecx
-        align	10h
-        lm1 :
-        movq	mm0, [ecx + esi - 2]
-          pavgb	mm0, [ecx + esi + 2]
-          movq	mm1, [ecx + esi - 1]
-          pavgb	mm1, [ecx + esi + 1]
-          movq	mm2, [ecx + esi]
-          pavgb	mm0, mm2
-          pavgb	mm0, mm2
-          pavgb	mm0, mm1
-          movntq[ecx + edi], mm0
-          add	ecx, 8
-          jnz	lm1
-      }
-      psrc2 += src_pitch;
-      ptmp2 += tmp_pitch;
-    }
-  }
-#endif
   __asm sfence;
 
   psrc2 = psrc;
@@ -937,49 +639,6 @@ void BlurR2(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
       psrc2 += src_pitch;
       ptmp2 += tmp_pitch;
     }
-#ifdef X86_32
-  else
-  {
-    // MMXExt version
-    for (int y = 0; y < height; y++)
-    {
-      int tmp_pitchp1 = y ? -tmp_pitch : 0;
-      int tmp_pitchp2 = y > 1 ? tmp_pitchp1 * 2 : tmp_pitchp1;
-      int tmp_pitchn1 = y < height - 1 ? tmp_pitch : 0;
-      int tmp_pitchn2 = y < height - 2 ? tmp_pitchn1 * 2 : tmp_pitchn1;
-      __asm {
-        push	ebp
-        mov	esi, ptmp2
-        mov	edi, psrc2
-        mov	ecx, i
-        add	ecx, 7
-        and ecx, ~7
-        mov	eax, tmp_pitchp2
-        mov	edx, tmp_pitchn2
-        mov	ebx, tmp_pitchp1
-        mov	ebp, tmp_pitchn1
-        sub	edi, esi
-        align	10h
-        lm2 :
-        movq	mm0, [esi + eax]
-          pavgb	mm0, [esi + edx]
-          movq	mm1, [esi + ebx]
-          pavgb	mm1, [esi + ebp]
-          movq	mm2, [esi]
-          pavgb	mm0, mm2
-          pavgb	mm0, mm2
-          pavgb	mm0, mm1
-          movntq[esi + edi], mm0
-          add	esi, 8
-          sub	ecx, 8
-          jnz	lm2
-          pop	ebp
-      }
-      psrc2 += src_pitch;
-      ptmp2 += tmp_pitch;
-    }
-  }
-#endif
   __asm sfence;
 }
 
@@ -1074,57 +733,6 @@ void GuideChroma(PVideoFrame &src, PVideoFrame &dst, const VideoInfo &src_vi, co
           pu += pitch_uv;
         }
       }
-#ifdef X86_32
-      else
-      {
-        // MMXExt version
-        for (int y = 0; y < height; y++)
-        {
-          __asm {
-            mov	ecx, i
-            mov	esi, py
-            mov	eax, pitch_y
-            mov	edx, pu
-            sub	esi, ecx
-            sub	esi, ecx
-            add	eax, esi
-            sub	edx, ecx
-            pcmpeqw	mm7, mm7
-            psrlw	mm7, 8
-            align	10h
-            lm :
-            movq	mm0, [esi + ecx * 2]
-              movq	mm2, [esi + ecx * 2 + 8]
-              movq	mm1, mm0
-              movq	mm3, mm2
-              pand	mm0, mm7
-              pand	mm2, mm7
-              psrlw	mm1, 8
-              psrlw	mm3, 8
-              packuswb	mm0, mm2
-              packuswb	mm1, mm3
-              pavgb	mm0, mm1
-              movq	mm1, [eax + ecx * 2]
-              movq	mm3, [eax + ecx * 2 + 8]
-              movq	mm2, mm1
-              movq	mm4, mm3
-              pand	mm1, mm7
-              pand	mm3, mm7
-              psrlw	mm2, 8
-              psrlw	mm4, 8
-              packuswb	mm1, mm3
-              packuswb	mm2, mm4
-              pavgb	mm1, mm2
-              pavgb	mm0, mm1
-              movntq[ecx + edx], mm0
-              add	ecx, 8
-              jnz	lm
-          }
-          py += pitch_y * 2;
-          pu += pitch_uv;
-        }
-      }	// MMXExt
-#endif
     }	// MPEG-1
   }
 
@@ -1194,44 +802,6 @@ void GuideChroma(PVideoFrame &src, PVideoFrame &dst, const VideoInfo &src_vi, co
           pu += pitch_uv;
         }
       }
-#ifdef X86_32
-      else
-      {
-        // MMXExt version
-        for (int y = 0; y < height; y++)
-        {
-          __asm {
-            mov	ecx, i
-            mov	esi, py
-            mov	eax, pitch_y
-            mov	edx, pu
-            sub	esi, ecx
-            sub	esi, ecx
-            sub	edx, ecx
-            pcmpeqw	mm7, mm7
-            psrlw	mm7, 8
-            align	10h
-            lm422 :
-            movq	mm0, [esi + ecx * 2]
-              movq	mm2, [esi + ecx * 2 + 8]
-              movq	mm1, mm0
-              movq	mm3, mm2
-              pand	mm0, mm7
-              pand	mm2, mm7
-              psrlw	mm1, 8
-              psrlw	mm3, 8
-              packuswb	mm0, mm2
-              packuswb	mm1, mm3
-              pavgb	mm0, mm1
-              movntq[ecx + edx], mm0
-              add	ecx, 8
-              jnz	lm422
-          }
-          py += pitch_y;
-          pu += pitch_uv;
-        }
-      }	// MMXExt
-#endif
     }	// MPEG-1
   }
 
@@ -1312,13 +882,8 @@ void CopyPlane(PVideoFrame &src, PVideoFrame &dst, int plane, const VideoInfo &d
 
 void CheckParams(IScriptEnvironment *env, const char *name, bool yuvPlanar, int thresh, int blur_type, int depth, int depthC, int chroma)
 {
-#ifdef X86_32
-  if (!(g_cpuid & CPUF_MMX))
-    env->ThrowError("%s: MMXExt capable CPU is required", name);
-#else
   if (!(g_cpuid & CPUF_SSE2))
     env->ThrowError("%s: SSE2 capable CPU is required", name);
-#endif
   if (!yuvPlanar)
     env->ThrowError("%s: Planar YUV input is required", name);
   if (thresh < 0 || thresh > 255)
