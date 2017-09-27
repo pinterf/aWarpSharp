@@ -72,12 +72,99 @@ void Sobel(PVideoFrame &src, PVideoFrame &dst, int plane, int thresh, const Vide
   unsigned char *pdst = dst->GetWritePtr(plane);
   const int height = src->GetHeight() >> src_vi.GetPlaneHeightSubsampling(plane);
   const int dst_row_size = dst->GetRowSize() >> dst_vi.GetPlaneWidthSubsampling(plane);
-  const int i = (dst_row_size + 3) >> 2;
+  const int padded_div4_rowsize = (dst_row_size + 3) >> 2;
+  const int i = padded_div4_rowsize; // for asm
 
   if (g_cpuid & CPUF_SSE2)
     // SSE2 version
     for (int y = 0; y < height; y++)
     {
+#if 1 // def _M_X64
+      // 0: prev=0 curr = 0 next = 1
+      // y-1: prev = y-2, curr = y-1, next = y-1
+      // else between: prev = y-1, curr = y, next = y+1
+        const uint8_t *psrc_qsi = psrc; //  mov	QSI, psrc
+        uint8_t *pdst_qdi = pdst; // mov	QDI, pdst
+        int qdx;
+        int qax_diffpitch_to_prev;
+
+        // last row: "next" is pitch
+        if (y < height - 1) //  cmp	ecx, height     // 32 bit O.K.
+          qdx = src_pitch * 2; // last row: "next" is only pitches away  // prev-next diff
+        else
+          qdx = src_pitch; // not last row: "next" is two pitches away
+
+        /*   y        prev            current               next         qdx_next_prev_diff   qax_curr_prev_diff
+             0        psrc            psrc              psrc+pitch       pitch*2               0
+             ..       psrc-pitch      psrc              psrc+pitch       pitch*2               pitch
+          height-1    psrc-pitch      psrc              psrc             pitch                 pitch
+        */
+
+        if (y != 0) {// test	QCX, QCX
+          qax_diffpitch_to_prev = src_pitch;
+          psrc_qsi -= src_pitch; // base is the prev line
+        }
+        else {
+          qax_diffpitch_to_prev = 0; // first row: center is same
+          // psrc_qsi -= 0; // base is the current line (not previous to the y=0 line)
+          qdx = src_pitch;
+        }
+        __m128i thresh128 = _mm_set1_epi8(thresh);
+        // PF 170926 todo comment: we have to separate first 16, last 16 and between
+        for (int qcx = padded_div4_rowsize; qcx > 0; qcx -= 4, psrc_qsi +=16, pdst_qdi += 16) {
+          __m128i prev_left_xmm2 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi - 1)); // PF 170926 read before the very first byte! Dangerous. Todo eliminate.
+          __m128i prev_cent_xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi + 0));
+          __m128i prev_righ_xmm4 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi + 1));
+          __m128i next_left_xmm5 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi + qdx - 1));
+          __m128i next_cent_xmm6 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi + qdx + 0));
+          __m128i next_righ_xmm7 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi + qdx + 1)); // PF 170926 read after the last byte! Dangerous. Todo eliminate.
+
+          __m128i avg_top_xmm3 = _mm_avg_epu8(_mm_avg_epu8(prev_left_xmm2, prev_righ_xmm4), prev_cent_xmm3);
+          __m128i avg_bottom_xmm6 = _mm_avg_epu8(_mm_avg_epu8(next_left_xmm5, next_righ_xmm7), next_cent_xmm6);
+
+          __m128i absdiff_topbottom_xmm6 = _mm_or_si128(_mm_subs_epu8(avg_top_xmm3, avg_bottom_xmm6), _mm_subs_epu8(avg_bottom_xmm6, avg_top_xmm3));
+
+          __m128i curr_left_xmm1 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi + qax_diffpitch_to_prev - 1));
+          __m128i curr_righ_xmm3 = _mm_loadu_si128(reinterpret_cast<const __m128i *>(psrc_qsi + qax_diffpitch_to_prev + 1));
+
+          __m128i avg_left_xmm1 = _mm_avg_epu8(_mm_avg_epu8(next_left_xmm5, prev_left_xmm2), curr_left_xmm1);// pavgb	xmm5, xmm2
+          __m128i avg_right_xmm3 = _mm_avg_epu8(_mm_avg_epu8(next_righ_xmm7, prev_righ_xmm4), curr_righ_xmm3); // pavgb	xmm7, xmm4
+
+          __m128i absdiff_leftright_xmm1 = _mm_or_si128(_mm_subs_epu8(avg_left_xmm1, avg_right_xmm3), _mm_subs_epu8(avg_right_xmm3, avg_left_xmm1));
+
+          __m128i xmm2 = _mm_adds_epu8(absdiff_topbottom_xmm6, absdiff_leftright_xmm1);
+          __m128i xmm1 = _mm_max_epu8(absdiff_topbottom_xmm6, absdiff_leftright_xmm1);
+          xmm2 = _mm_adds_epu8(xmm2, xmm1);
+          
+          xmm2 = _mm_adds_epu8(_mm_adds_epu8(xmm2, xmm2), xmm2); // *3
+          xmm2 = _mm_adds_epu8(xmm2, xmm2); // *6
+          xmm2 = _mm_min_epu8(xmm2, thresh128);  //          pminub	xmm2, xmm0 // thresh
+          // qcx: -=4 in cycle, originally: (row_size + 3) / 4
+          // number of 4 byte blocks
+          // row_size     qcx 
+          // 1..4        1     
+          // 5..8        2
+          // 6..12.......3
+          // 13..16      4
+          if (qcx >= 4) {
+            // full 16 byte
+            _mm_storeu_si128(reinterpret_cast<__m128i *>(pdst_qdi), xmm2);
+          }
+          else if (qcx == 1) {
+            // 4 byte
+            *(uint32_t *)(pdst_qdi) = _mm_cvtsi128_si32(xmm2);
+          }
+          else if (qcx == 2) {
+            // 8 byte
+            _mm_storel_epi64(reinterpret_cast<__m128i *>(pdst_qdi), xmm2);
+          }
+          else if (qcx == 3) {
+            // 8+4 byte
+            _mm_storel_epi64(reinterpret_cast<__m128i *>(pdst_qdi), xmm2);
+            *(uint32_t *)(pdst_qdi + 8) = _mm_cvtsi128_si32(_mm_srli_si128(xmm2, 8));
+          }
+        }
+#else
       __asm {
         mov	QSI, psrc
         mov	QDI, pdst
@@ -159,6 +246,7 @@ void Sobel(PVideoFrame &src, PVideoFrame &dst, int plane, int thresh, const Vide
         movd[QSI + QDI], xmm2
           lx :
       }
+#endif
       pdst[0] = pdst[1];
       pdst[dst_row_size - 1] = pdst[dst_row_size - 2];
       psrc += src_pitch;
@@ -177,7 +265,7 @@ void BlurR6(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
   unsigned char *const ptmp = tmp->GetWritePtr(plane);
   const int height = src->GetHeight() >> src_vi.GetPlaneHeightSubsampling(plane);
   const int i = src->GetRowSize() >> src_vi.GetPlaneWidthSubsampling(plane);
-  const int ia = (i + 0xF) >> 4;
+  const int ia = (i + 0xF) >> 4; // aligned
   unsigned char *psrc2, *ptmp2;
 
   psrc2 = psrc;
@@ -933,6 +1021,7 @@ PVideoFrame __stdcall aWarpSharp::GetFrame(int n, IScriptEnvironment *env)
   PVideoFrame tmp = env->NewVideoFrame(vi);
   PVideoFrame dst = env->NewVideoFrame(vi);
 
+  // plane Y
   if (chroma != 5)
   {
     Sobel(src, tmp, PLANAR_Y, thresh, vi, vi);
@@ -945,6 +1034,8 @@ PVideoFrame __stdcall aWarpSharp::GetFrame(int n, IScriptEnvironment *env)
   }
   else
     CopyPlane(src, dst, PLANAR_Y, vi);
+
+  // plane U and V
   switch (chroma)
   {
   case 0:
@@ -1025,10 +1116,13 @@ PVideoFrame __stdcall aSobel::GetFrame(int n, IScriptEnvironment *env)
   PVideoFrame src = child->GetFrame(n, env);
   PVideoFrame dst = env->NewVideoFrame(vi);
 
+  // plane Y
   if (chroma < 5)
     Sobel(src, dst, PLANAR_Y, thresh, vi, vi);
   else
     CopyPlane(src, dst, PLANAR_Y, vi);
+
+  // plane U and V
   switch (chroma)
   {
   case 0:
