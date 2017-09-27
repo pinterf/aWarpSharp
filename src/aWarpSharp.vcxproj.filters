@@ -59,4 +59,9 @@
       <Filter>Docs</Filter>
     </Text>
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="aWarpSharp.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
 </Project>
