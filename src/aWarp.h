@@ -193,8 +193,8 @@ void MERGE(Warp, SMAGL)(PVideoFrame &src, PVideoFrame &edg, PVideoFrame &dst, in
           pminsw	xmm1, [esp + 58h] // x_limit_max
           pmaxsw	xmm1, [esp + 48h] // x_limit_min
 #else
-          movdqa	xmm1, xmm13	// x_limit_max
-          movdqa	xmm1, xmm12	// x_limit_min
+          pminsw	xmm1, xmm13	// x_limit_max
+          pmaxsw	xmm1, xmm12	// x_limit_min
 #endif
           pand	xmm7, xmm3
           pandn	xmm0, xmm7
