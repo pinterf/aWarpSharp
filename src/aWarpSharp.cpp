@@ -451,8 +451,8 @@ void BlurR6(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
         mov	QSI, ptmp2
         mov	QDI, psrc2
         movsx_int QCX, ia
-        lea	QBX, [QAX + QAX * 2]
-        lea	QDX, [QBX + QAX * 2]
+        lea	QBX, [QAX + QAX * 2] // pitch*3
+        lea	QDX, [QBX + QAX * 2] // pitch*5
         add	QDX, QSI
         sub	QDI, QSI
         align	10h
@@ -460,10 +460,10 @@ void BlurR6(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
         movdqa	xmm0, [QSI]
           movdqa	xmm1, [QSI + QAX * 1]
           movdqa	xmm2, [QSI + QAX * 2]
-          movdqa	xmm3, [QSI + QAX * 1]
+          movdqa	xmm3, [QSI + QBX * 1] // pitch*3, fixed 20170928
           movdqa	xmm4, [QSI + QAX * 4]
-          movdqa	xmm5, [QDX]
-          movdqa	xmm6, [QDX + QAX * 1]
+          movdqa	xmm5, [QDX]           // pitch*5
+          movdqa	xmm6, [QDX + QAX * 1] // pitch*6
           pavgb	xmm6, xmm5
           pavgb	xmm4, xmm3
           pavgb	xmm2, xmm1
@@ -534,8 +534,8 @@ void BlurR6(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
         mov	QSI, ptmp2
         mov	QDI, psrc2
         movsx_int	QCX, ia
-        lea	QBX, [QAX + QAX * 2]
-        lea	QDX, [QBX + QAX * 2]
+        lea	QBX, [QAX + QAX * 2] // pitch*3
+        lea	QDX, [QBX + QAX * 2] // pitch*5
         add	QDX, QSI
         sub	QDI, QSI
         align	10h
@@ -543,10 +543,10 @@ void BlurR6(PVideoFrame &src, PVideoFrame &tmp, int plane, const VideoInfo &src_
         movdqa	xmm6, [QSI]
           movdqa	xmm5, [QSI + QAX * 1]
           movdqa	xmm4, [QSI + QAX * 2]
-          movdqa	xmm3, [QSI + QBX * 1]
+          movdqa	xmm3, [QSI + QBX * 1] // pitch*3
           movdqa	xmm2, [QSI + QAX * 4]
-          movdqa	xmm1, [QDX]
-          movdqa	xmm0, [QDX + QAX * 1]
+          movdqa	xmm1, [QDX]           // pitch*5
+          movdqa	xmm0, [QDX + QAX * 1] // pitch*6
           pavgb	xmm6, xmm5
           pavgb	xmm4, xmm3
           pavgb	xmm2, xmm1
